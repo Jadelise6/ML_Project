@@ -65,6 +65,7 @@ ordinal_col = ["Growth_Stage", "Growth_Rate", "Difficulty_Level", "Fragrance_Lev
 
 def waveshow(path, data_str):
     """ Trace l'onde acoustique des données
+    Args:
         - path (str) : chemin du fichier audio
         - data_str (str) : titre pour l'affichage
     """
@@ -81,6 +82,7 @@ def waveshow(path, data_str):
     
 def specshow(path, data_str):
     """ Trace le spectogramme des données
+    Args:
         - path (str) : chemin du fichier audio
         - data_str (str) : titre pour l'affichage
     """
@@ -102,6 +104,7 @@ def specshow(path, data_str):
 
 def specshow_mfcc(path, data_str):
     """ Trace le spectogramme des MFCC des données
+    Args:
         - path (str) : chemin du fichier audio
         - data_str (str) : titre pour l'affichage
     """
@@ -120,42 +123,60 @@ def specshow_mfcc(path, data_str):
     plt.savefig(f"./Images/{data_str}_spectshow_mfcc.png", format='png', bbox_inches='tight')
     plt.show()
     
-def compare_mfcc(df, col, col_str, family, family_special=False):
+def compare_mfcc(df, col, col_str, family, min_n=20):
     """ Compare les MFCC des données de dix espèces
+    Args:
         - df (str) : données
         - col (str) : colonne
         - col_str (str) : titre pour l'affichage
         - family (str) : famille considérée
     """
-    # Prendre 10 espèces/familles aléatoirement
-    np.random.seed(42)
+    # Condition pour les espèces
+    if col != "class_name":
+        # Garder les espèces avec min_n d'exemples
+        df_count = df[col].value_counts()
+        df_index = df_count[df_count >= min_n].index
+        df = df[df[col].isin(df_index)]
+    
     df_values = df[col].dropna().unique()
-    size_sample = min(10, len(df_values))
-    if size_sample == 0:
+    if len(df_values) == 0:
         return
-    df_col_sample = np.random.choice(df_values, size_sample, replace=False)
+        
+    # Prendre 10 espèces/familles aléatoirement
+    np.random.seed(42)    
+    df_col_sample = np.random.choice(df_values, size=min(10, len(df_values)), replace=False)
 
     # Sélectionner les lignes correspondant à chaque espèce/famille
     rows = df[df[col].isin(df_col_sample)].copy()
-
-    # Plot mean +- std par espèce
-    x = np.arange(13)
+    
     plt.figure(figsize=(12, 6))
 
-    # Plot pour chaque espèce
-    for species, row in rows.groupby(col):
-        mat = np.vstack(row["MFCC"].apply(lambda v: np.fromstring(v.strip("[]"), sep=" ")).to_numpy())
-        mu = mat.mean(axis=0)
-        sd = mat.std(axis=0)
+    # MFCC pour chaque espèce
+    group_mats = {}
+    for g, row in rows.groupby(col):
+        mats = np.vstack(row["MFCC"].apply(lambda v: np.fromstring(v.strip("[]"), sep=" ")).to_numpy())
+        group_mats[g] = mats
+        
+    # Normalisation de chaque coefficient
+    global_mat = np.vstack(list(group_mats.values()))
+    mu_global = global_mat.mean(axis=0)
+    sd_global = global_mat.std(axis=0) + 1e-8
+     
+    # Plot par espèce
+    for g, mat in group_mats.items():
+        mat_normalized = (mat - mu_global) / sd_global
+        mu = mat_normalized.mean(axis=0)
+        quantile_25 = np.quantile(mat_normalized, 0.25, axis=0)
+        quantile_75 = np.quantile(mat_normalized, 0.75, axis=0)
 
         x = np.arange(len(mu))
-        plt.plot(x, mu, label=str(species), linewidth=2)
-        plt.fill_between(x, mu - sd, mu + sd, alpha=0.15)
+        plt.plot(x, mu, label=str(g), linewidth=2)
+        plt.fill_between(x, quantile_25, quantile_75, alpha=0.15)
 
     plt.xticks(x, [f"{i}" for i in x])
     plt.xlabel("Coefficient MFCC")
-    plt.ylabel("Valeur")
-    plt.title(f"{family} - Moyenne MFCC par {col_str} avec variance (+-1 std)")
+    plt.ylabel("Valeur normalisée")
+    plt.title(f"{family} - MFCC normalisé par {col_str} (moyenne et quantiles)")
     plt.legend(ncol=2, fontsize=12)
     
     plt.tight_layout()
