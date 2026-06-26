@@ -1,0 +1,13 @@
+src/__pycache__/*
+augmentation/*
+data/*
+eda_csv/*
+segments/*
+*.pyc
+.ipynb_checkpoints/
+*.wav
+outputs/features/*
+outputs/features/soundscape_cache/*
+outputs/models/*
+outputs/results/*
+outputs/figures/*
